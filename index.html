@@ -93,7 +93,7 @@
    ========================================================================= */
 
 // ====== PAROLA DE ADMIN — SCHIMB-O! ======================================
-const ADMIN_KEY = 'schimba-parola';
+const ADMIN_KEY = 'moldova123';
 const IS_ADMIN = new URLSearchParams(location.search).get('admin') === ADMIN_KEY;
 
 // ---- 1) SURSA DE TILE-URI (publică) ------------------------------------
@@ -112,15 +112,16 @@ const BAKED_T = { ax: 33.203125, bx: -4000, ay: -46.875, by: 8000 };
 
 // ---- 3) CATEGORII -------------------------------------------------------
 const CATEGORIES = {
-  rau_famata: { label:'Zonă Rău Famată', color:'#e74c3c' },
-  retrasa:    { label:'Zonă Retrasă',    color:'#992d22' }
+  rau_famata:  { label:'Zonă Rău Famată',  color:'#e74c3c' }, // 🔴 tot ce e ilegal permis
+  semipublica: { label:'Zonă Semipublică', color:'#f1c40f' }, // 🟡 răpiri/intimidare da, jaf nu
+  sigura:      { label:'Zonă Verde',      color:'#2ecc71' }  // 🟢 activități ilegale interzise (redenumește dacă e altul)
 };
 
 // ---- 4) ZONELE (sursa de adevăr — editează-le ca admin, apoi "Cod") -----
 const ZONES = [
-  { name:'Vinewood Hills', category:'retrasa',
+  { name:'Vinewood Hills', category:'semipublica',
     latlngs:[[-150,102],[-150,150],[-162,152],[-165,120],[-162,104]] },
-  { name:'Downtown',       category:'retrasa',
+  { name:'Downtown',       category:'sigura',
     latlngs:[[-172,150],[-172,162],[-176,162],[-176,150]] },
   { name:'Davis',          category:'rau_famata',
     latlngs:[[-186,112],[-185,134],[-200,134],[-201,114]] },
