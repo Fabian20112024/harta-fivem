@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hartă FiveM — Zone</title>
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet.draw (doar pentru admin) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+<style>
+  html, body { margin:0; height:100%; background:#0b1a2b; font-family:"Segoe UI",Roboto,Arial,sans-serif; }
+  #map { position:absolute; inset:0; background:#0b1a2b; }
+
+  .panel { background:#fff; border:1px solid #b7b7b7; border-radius:4px;
+    box-shadow:0 1px 5px rgba(0,0,0,.4); padding:8px 10px; font-size:13px; color:#222; line-height:1.75; min-width:172px; }
+  .panel h4 { margin:2px 0 6px; font-size:11px; letter-spacing:.5px; text-transform:uppercase; color:#666; font-weight:700; }
+  .panel label { display:block; cursor:pointer; user-select:none; }
+  .panel input[type=radio], .panel input[type=checkbox] { margin-right:7px; vertical-align:-1px; }
+  .panel .sep { height:1px; background:#e6e6e6; margin:7px -10px; }
+  .swatch { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; border:1px solid rgba(0,0,0,.3); }
+  .btnrow { display:flex; gap:6px; margin-top:6px; }
+  .btn { flex:1 1 auto; text-align:center; background:#1f6feb; color:#fff; border:none; border-radius:4px;
+         padding:6px 8px; font-size:12px; cursor:pointer; white-space:nowrap; }
+  .btn.secondary { background:#3a4756; }
+  .btn:hover { filter:brightness(1.08); }
+  .adminbadge { display:inline-block; background:#1f6feb; color:#fff; font-size:10px; font-weight:700;
+    padding:1px 6px; border-radius:10px; margin-left:6px; letter-spacing:.4px; }
+
+  .coords { position:absolute; left:0; bottom:0; z-index:1000;
+    background:rgba(10,20,35,.82); color:#d7e3f4; font:12px/1.4 "Consolas",monospace;
+    padding:4px 12px; border-top-right-radius:4px; letter-spacing:.5px; }
+  .coords b { color:#7fb2ff; }
+
+  .modal-bg { position:absolute; inset:0; background:rgba(0,0,0,.45); z-index:3000; display:none; align-items:center; justify-content:center; }
+  .modal { background:#fff; border-radius:8px; padding:18px 20px; width:340px; box-shadow:0 8px 30px rgba(0,0,0,.5); }
+  .modal.wide { width:560px; }
+  .modal h3 { margin:0 0 4px; font-size:16px; }
+  .modal label { display:block; font-size:12px; color:#555; margin:10px 0 4px; }
+  .modal input, .modal select, .modal textarea { width:100%; box-sizing:border-box; padding:7px 8px; border:1px solid #ccc; border-radius:5px; font-size:13px; }
+  .modal textarea { font-family:Consolas,monospace; font-size:11px; height:230px; white-space:pre; }
+  .modal .row { display:flex; gap:8px; margin-top:16px; }
+  .modal .row .btn { flex:1; }
+
+  .leaflet-container { background:#0b1a2b; }
+  .zone-tip { font-weight:600; }
+  .hint { position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:1500;
+    background:rgba(10,20,35,.88); color:#cfe0f5; padding:6px 14px; border-radius:20px; font-size:12px; display:none; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="coords" id="coords">X: 0.00&nbsp;&nbsp; Y: 0.00</div>
+<div class="hint" id="hint"></div>
+
+<!-- modal denumire zonă -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3 id="modalTitle">Zonă nouă</h3>
+    <label>Nume</label><input id="mName" placeholder="ex. Cartier Davis" />
+    <label>Categorie</label><select id="mCat"></select>
+    <label>Culoare</label><input id="mColor" type="color" value="#e74c3c" style="height:38px; padding:2px;" />
+    <div class="row">
+      <button class="btn secondary" id="mCancel">Anulează</button>
+      <button class="btn" id="mSave">Salvează</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal cod pentru wiki -->
+<div class="modal-bg" id="codeBg">
+  <div class="modal wide">
+    <h3>Cod pentru fișier</h3>
+    <p style="font-size:12px;color:#555;margin:6px 0">Copiază și înlocuiește blocurile <code>BAKED_T</code> și <code>ZONES</code> din index.html, apoi urcă fișierul din nou pe GitHub. Așa toți vizitatorii văd aceleași zone.</p>
+    <textarea id="codeOut" readonly></textarea>
+    <div class="row">
+      <button class="btn secondary" id="codeClose">Închide</button>
+      <button class="btn" id="codeCopy">Copiază</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   HARTĂ FIVEM — ZONE
+   • Vizitatorii NORMALI văd harta read-only (fără unelte de editare).
+   • ADMIN: deschide harta cu  ?admin=PAROLA  ca să apară editorul.
+     ex:  https://userul-tau.github.io/harta-fivem/?admin=schimba-parola
+   ========================================================================= */
+
+// ====== PAROLA DE ADMIN — SCHIMB-O! ======================================
+const ADMIN_KEY = 'schimba-parola';
+const IS_ADMIN = new URLSearchParams(location.search).get('admin') === ADMIN_KEY;
+
+// ---- 1) SURSA DE TILE-URI (publică) ------------------------------------
+const TILE_BASE = 'https://cdn.jsdelivr.net/gh/meesvrh/GTAV-Map-Tiles@main/tiles';
+const TILE_STYLES = {
+  satelit: { folder:'satellite', ext:'jpg', maxNative:5, label:'Satelit' },
+  atlas:   { folder:'atlas',     ext:'jpg', maxNative:4, label:'Atlas'   }
+};
+const MIN_ZOOM = 1, MAX_ZOOM = 7, TILE_SIZE = 256;
+const MAP_BOUNDS = [[-256, 0], [0, 256]];
+
+// ---- 2) CALIBRAREA COORDONATELOR DIN JOC (bake-uită în fișier) ----------
+//     gameX = ax*lng + bx ; gameY = ay*lat + by
+//     Admin: buton "Calibrează" -> apoi "Cod" ca să salvezi valorile aici.
+const BAKED_T = { ax: 33.203125, bx: -4000, ay: -46.875, by: 8000 };
+
+// ---- 3) CATEGORII -------------------------------------------------------
+const CATEGORIES = {
+  rau_famata: { label:'Zonă Rău Famată', color:'#e74c3c' },
+  retrasa:    { label:'Zonă Retrasă',    color:'#992d22' }
+};
+
+// ---- 4) ZONELE (sursa de adevăr — editează-le ca admin, apoi "Cod") -----
+const ZONES = [
+  { name:'Vinewood Hills', category:'retrasa',
+    latlngs:[[-150,102],[-150,150],[-162,152],[-165,120],[-162,104]] },
+  { name:'Downtown',       category:'retrasa',
+    latlngs:[[-172,150],[-172,162],[-176,162],[-176,150]] },
+  { name:'Davis',          category:'rau_famata',
+    latlngs:[[-186,112],[-185,134],[-200,134],[-201,114]] },
+  { name:'Strawberry',     category:'rau_famata',
+    latlngs:[[-176,92],[-176,108],[-188,108],[-189,94]] },
+  { name:'Cypress Flats',  category:'rau_famata',
+    latlngs:[[-184,136],[-184,150],[-194,149],[-194,137]] }
+];
+
+// ================= TRANSFORM =================
+let T = Object.assign({}, BAKED_T);
+if (IS_ADMIN) { try { const s = localStorage.getItem('fivem_map_T'); if (s) T = JSON.parse(s); } catch(e){} }
+function worldToGame(ll){ return { x:T.ax*ll.lng + T.bx, y:T.ay*ll.lat + T.by }; }
+function gameToWorld(x,y){ return L.latLng((y-T.by)/T.ay, (x-T.bx)/T.ax); }
+
+// ================= MAP =================
+const map = L.map('map', { crs:L.CRS.Simple, minZoom:MIN_ZOOM, maxZoom:MAX_ZOOM });
+function makeTileLayer(key){
+  const st = TILE_STYLES[key];
+  return L.tileLayer(`${TILE_BASE}/${st.folder}/{z}/{x}/{y}.${st.ext}`, {
+    minZoom:MIN_ZOOM, maxZoom:MAX_ZOOM, maxNativeZoom:st.maxNative,
+    tileSize:TILE_SIZE, noWrap:true, bounds:MAP_BOUNDS,
+    attribution:'Tile-uri GTA V: meesvrh · Editor zone: Fury Map'
+  });
+}
+const GameGrid = L.GridLayer.extend({
+  createTile(coords){
+    const tile=document.createElement('canvas'); const size=this.getTileSize();
+    tile.width=size.x; tile.height=size.y; const ctx=tile.getContext('2d');
+    ctx.fillStyle='#0b1a2b'; ctx.fillRect(0,0,size.x,size.y);
+    ctx.strokeStyle='rgba(120,160,220,.22)'; ctx.lineWidth=1; ctx.strokeRect(.5,.5,size.x-1,size.y-1);
+    ctx.beginPath(); for(let i=64;i<size.x;i+=64){ ctx.moveTo(i,0);ctx.lineTo(i,size.y);ctx.moveTo(0,i);ctx.lineTo(size.x,i); }
+    ctx.strokeStyle='rgba(120,160,220,.08)'; ctx.stroke();
+    const ll=map.unproject(L.point(coords.x*size.x,coords.y*size.y),coords.z); const g=worldToGame(ll);
+    ctx.fillStyle='rgba(150,190,240,.6)'; ctx.font='10px Consolas,monospace';
+    ctx.fillText(`${Math.round(g.x)}, ${Math.round(g.y)}`,4,12);
+    return tile;
+  }
+});
+const baseLayers = {
+  satelit: makeTileLayer('satelit'),
+  atlas:   makeTileLayer('atlas'),
+  grid:    new GameGrid({ minZoom:MIN_ZOOM, maxZoom:MAX_ZOOM, tileSize:TILE_SIZE, bounds:MAP_BOUNDS, noWrap:true })
+};
+baseLayers.satelit.addTo(map);
+map.fitBounds(MAP_BOUNDS);
+
+// ================= ZONE =================
+const drawnItems = new L.FeatureGroup();          // doar admin (editare)
+if (IS_ADMIN) drawnItems.addTo(map);
+const catGroups = {};
+Object.keys(CATEGORIES).forEach(c => { catGroups[c] = L.featureGroup().addTo(map); });
+let zones = [], idc = 0;
+function styleFor(color){ return { color, weight:2, opacity:.95, fillColor:color, fillOpacity:.35 }; }
+function addZone(z){
+  const color = z.color || (CATEGORIES[z.category] ? CATEGORIES[z.category].color : '#e74c3c');
+  const latlngs = z.latlngs || z.points.map(p=>{ const w=gameToWorld(p[0],p[1]); return [w.lat,w.lng]; });
+  const layer = L.polygon(latlngs, styleFor(color));
+  layer.bindTooltip(z.name, { className:'zone-tip', sticky:true });
+  layer.bindPopup(`<b>${z.name}</b><br><small>${CATEGORIES[z.category]?CATEGORIES[z.category].label:z.category}</small>`);
+  const id = z.id || ('z'+(++idc)); layer._zoneId = id;
+  (catGroups[z.category] || catGroups[Object.keys(CATEGORIES)[0]]).addLayer(layer);
+  if (IS_ADMIN) drawnItems.addLayer(layer);
+  zones.push({ id, name:z.name, category:z.category, color, layer });
+  return zones[zones.length-1];
+}
+ZONES.forEach(addZone);
+
+// ================= EDITOR (doar admin) =================
+if (IS_ADMIN){
+  const drawControl = new L.Control.Draw({
+    position:'topleft',
+    draw:{ polygon:{ allowIntersection:false, shapeOptions:styleFor('#e74c3c') },
+           rectangle:{ shapeOptions:styleFor('#e74c3c') },
+           polyline:false, circle:false, circlemarker:false, marker:false },
+    edit:{ featureGroup:drawnItems, remove:true }
+  });
+  map.addControl(drawControl);
+  map.on(L.Draw.Event.CREATED, e=>{ pendingLayer=e.layer; openModal(); });
+  map.on(L.Draw.Event.DELETED, e=>{ e.layers.eachLayer(l=>{ zones=zones.filter(z=>z.id!==l._zoneId); }); refreshOverlayCounts(); });
+}
+
+// modal denumire
+let pendingLayer=null;
+const modalBg=document.getElementById('modalBg'), mCat=document.getElementById('mCat');
+Object.entries(CATEGORIES).forEach(([k,v])=>{ const o=document.createElement('option'); o.value=k; o.textContent=v.label; mCat.appendChild(o); });
+function openModal(){ document.getElementById('mName').value=''; mCat.value=Object.keys(CATEGORIES)[0];
+  document.getElementById('mColor').value=CATEGORIES[mCat.value].color; modalBg.style.display='flex'; document.getElementById('mName').focus(); }
+mCat.addEventListener('change',()=>document.getElementById('mColor').value=CATEGORIES[mCat.value].color);
+document.getElementById('mCancel').onclick=()=>{ if(pendingLayer) map.removeLayer(pendingLayer); pendingLayer=null; modalBg.style.display='none'; };
+document.getElementById('mSave').onclick=()=>{
+  if(!pendingLayer) return;
+  const rec=addZone({ name:document.getElementById('mName').value.trim()||'Zonă', category:mCat.value,
+    color:document.getElementById('mColor').value, latlngs:pendingLayer.getLatLngs()[0].map(p=>[p.lat,p.lng]) });
+  map.removeLayer(pendingLayer); rec.layer.openPopup(); pendingLayer=null; modalBg.style.display='none'; refreshOverlayCounts();
+};
+
+// ================= COORDONATE =================
+const coordsEl=document.getElementById('coords');
+map.on('mousemove', e=>{ const g=worldToGame(e.latlng); coordsEl.innerHTML=`X: <b>${g.x.toFixed(3)}</b>&nbsp;&nbsp; Y: <b>${g.y.toFixed(3)}</b>`; });
+
+// ================= PANOU =================
+const Panel = L.Control.extend({ options:{position:'topright'},
+  onAdd(){
+    const d=L.DomUtil.create('div','panel');
+    L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
+    const adminBtns = IS_ADMIN ? `
+      <div class="sep"></div>
+      <div class="btnrow">
+        <button class="btn" id="bCode">Cod pentru wiki</button>
+      </div>
+      <div class="btnrow">
+        <button class="btn secondary" id="bExport">JSON</button>
+        <button class="btn secondary" id="bImport">Import</button>
+        <button class="btn secondary" id="bLua">Lua</button>
+      </div>
+      <div class="btnrow">
+        <button class="btn secondary" id="bCal">Calibrează coordonate</button>
+      </div>
+      <input type="file" id="fileIn" accept="application/json" style="display:none" />` : '';
+    d.innerHTML=`
+      <h4>Hartă ${IS_ADMIN?'<span class="adminbadge">ADMIN</span>':''}</h4>
+      <label><input type="radio" name="base" value="satelit" checked> Satelit</label>
+      <label><input type="radio" name="base" value="atlas"> Atlas</label>
+      <label><input type="radio" name="base" value="grid"> Grid</label>
+      <div class="sep"></div>
+      <h4>Zone</h4>
+      <div id="ovList"></div>
+      ${adminBtns}`;
+    return d;
+  }
+});
+map.addControl(new Panel());
+
+document.querySelectorAll('input[name=base]').forEach(r=> r.addEventListener('change', e=>{
+  Object.values(baseLayers).forEach(l=>map.removeLayer(l));
+  baseLayers[e.target.value].addTo(map).bringToBack();
+}));
+
+function refreshOverlayCounts(){
+  const list=document.getElementById('ovList'); if(!list) return; list.innerHTML='';
+  Object.entries(CATEGORIES).forEach(([k,v])=>{
+    const n=zones.filter(z=>z.category===k).length;
+    const wrap=document.createElement('label');
+    wrap.innerHTML=`<input type="checkbox" checked><span class="swatch" style="background:${v.color}"></span>${v.label} <small style="color:#888">(${n})</small>`;
+    list.appendChild(wrap);
+    wrap.querySelector('input').addEventListener('change', ev=>{ if(ev.target.checked) catGroups[k].addTo(map); else map.removeLayer(catGroups[k]); });
+  });
+}
+refreshOverlayCounts();
+
+// ================= ADMIN: export / cod / import / calibrare =================
+function currentZones(){ return zones.map(z=>({ name:z.name, category:z.category, color:z.color,
+  latlngs: z.layer.getLatLngs()[0].map(p=>[Math.round(p.lat*100)/100, Math.round(p.lng*100)/100]) })); }
+function download(name,text){ const b=new Blob([text],{type:'application/octet-stream'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); }
+function toLua(){ let s='-- Zone generate din Harta FiveM\nZones = {\n';
+  zones.forEach(z=>{ const pts=z.layer.getLatLngs()[0].map(p=>{ const g=worldToGame(p); return `        vector2(${g.x.toFixed(2)}, ${g.y.toFixed(2)})`; }).join(',\n');
+    s+=`    ["${z.name}"] = {\n        category = "${z.category}",\n        color = "${z.color}",\n        points = {\n${pts}\n        }\n    },\n`; });
+  return s+'}\n\nreturn Zones\n'; }
+function genCode(){
+  const t = `const BAKED_T = { ax: ${T.ax}, bx: ${T.bx}, ay: ${T.ay}, by: ${T.by} };`;
+  const zlines = currentZones().map(z=>
+    `  { name:${JSON.stringify(z.name)}, category:${JSON.stringify(z.category)}, color:${JSON.stringify(z.color)},\n    latlngs:${JSON.stringify(z.latlngs)} }`).join(',\n');
+  return `${t}\n\nconst ZONES = [\n${zlines}\n];`;
+}
+if (IS_ADMIN){
+  const codeBg=document.getElementById('codeBg');
+  document.addEventListener('click', e=>{
+    if(e.target.id==='bCode'){ document.getElementById('codeOut').value=genCode(); codeBg.style.display='flex'; }
+    if(e.target.id==='codeClose'){ codeBg.style.display='none'; }
+    if(e.target.id==='codeCopy'){ const t=document.getElementById('codeOut'); t.select(); document.execCommand('copy'); flash('Copiat ✔'); }
+    if(e.target.id==='bExport'){ download('zone.json', JSON.stringify({version:1,transform:T,zones:currentZones()},null,2)); }
+    if(e.target.id==='bImport'){ document.getElementById('fileIn').click(); }
+    if(e.target.id==='bLua'){ download('zones.lua', toLua()); }
+    if(e.target.id==='bCal'){ startCalibration(); }
+  });
+  document.addEventListener('change', e=>{
+    if(e.target.id==='fileIn' && e.target.files[0]){ const fr=new FileReader();
+      fr.onload=()=>{ try{ loadData(JSON.parse(fr.result)); }catch(err){ flash('Fișier invalid'); } }; fr.readAsText(e.target.files[0]); }
+  });
+  function loadData(data){
+    zones.forEach(z=>{ drawnItems.removeLayer(z.layer); Object.values(catGroups).forEach(g=>g.removeLayer(z.layer)); }); zones=[];
+    if(data.transform){ T=data.transform; persistT(); }
+    (data.zones||[]).forEach(addZone); refreshOverlayCounts(); flash('Zone încărcate: '+zones.length);
+  }
+  // calibrare
+  let calState=null;
+  window.startCalibration=function(){ calState={pts:[]}; map.getContainer().style.cursor='crosshair'; flash('Calibrare 1/2 — click pe un punct cu coordonate cunoscute din joc',0); };
+  map.on('click', e=>{
+    if(!calState) return;
+    const g=worldToGame(e.latlng);
+    const gx=parseFloat(prompt('Coordonata X din joc:', g.x.toFixed(1)));
+    const gy=parseFloat(prompt('Coordonata Y din joc:', g.y.toFixed(1)));
+    if(isNaN(gx)||isNaN(gy)) return;
+    calState.pts.push({ll:e.latlng,gx,gy});
+    if(calState.pts.length===1){ flash('Calibrare 2/2 — click pe al doilea punct cunoscut',0); return; }
+    const [a,b]=calState.pts;
+    T.ax=(a.gx-b.gx)/(a.ll.lng-b.ll.lng); T.bx=a.gx-T.ax*a.ll.lng;
+    T.ay=(a.gy-b.gy)/(a.ll.lat-b.ll.lat); T.by=a.gy-T.ay*a.ll.lat;
+    persistT(); calState=null; map.getContainer().style.cursor='';
+    flash('Calibrat ✔ — apasă „Cod pentru wiki" ca să salvezi valorile');
+  });
+  function persistT(){ try{ localStorage.setItem('fivem_map_T', JSON.stringify(T)); }catch(e){} }
+}
+
+// ================= HINT =================
+let flashT;
+function flash(msg, ms=2200){ const h=document.getElementById('hint'); h.textContent=msg; h.style.display='block'; clearTimeout(flashT); if(ms) flashT=setTimeout(()=>h.style.display='none',ms); }
+</script>
+</body>
+</html>
