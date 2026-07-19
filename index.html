@@ -110,7 +110,15 @@ const MAP_BOUNDS = [[-256, 0], [0, 256]];
 //     Admin: buton "Calibrează" -> apoi "Cod" ca să salvezi valorile aici.
 const BAKED_T = { ax: 33.203125, bx: -4000, ay: -46.875, by: 8000 };
 
-const ZONES = [
+// ---- 3) CATEGORII -------------------------------------------------------
+
+  const CATEGORIES = {
+  rau_famata:  { label:'Zonă Rău Famată',  color:'#e74c3c' }, // 🔴 tot ce e ilegal permis
+  semipublica: { label:'Zonă Semipublică', color:'#f1c40f' }, // 🟡 răpiri/intimidare da, jaf nu
+  sigura:      { label:'Zonă Verde',      color:'#2ecc71' }  // 🟢 activități ilegale interzise (redenumește dacă e altul)
+};
+
+  const ZONES = [
   { name:"Zonă", category:"sigura", color:"#2ecc71",
     latlngs:[[-250.5,120.5],[-249.75,84.5],[-239,68.75],[-215.25,85.25],[-203.25,83.5],[-196.5,73.75],[-186,64.25],[-172,52.5],[-165.37,51.5],[-163,53.25],[-159.5,51.88],[-155.62,49.5],[-139.5,49.25],[-122.25,55.75],[-114.5,59],[-107.75,51],[-100.75,50.5],[-95.25,57.75],[-88.25,62.5],[-73.75,70.25],[-64.25,69.5],[-57.25,74],[-35,99.75],[-11.5,115.25],[-19,129.75],[-29,138.5],[-28.5,160.75],[-33.75,174.75],[-40.25,187.25],[-48.5,195.75],[-55.5,199.75],[-84.5,207.75],[-120.5,197],[-150.75,185.5],[-180.5,189],[-197,182.25],[-212.75,181],[-248.5,155]] },
   { name:"Zonă", category:"rau_famata", color:"#e74c3c",
